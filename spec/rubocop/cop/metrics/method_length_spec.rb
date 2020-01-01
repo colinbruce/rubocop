@@ -5,6 +5,40 @@ RSpec.describe RuboCop::Cop::Metrics::MethodLength, :config do
 
   let(:cop_config) { { 'Max' => 5, 'CountComments' => false } }
 
+  shared_examples 'ignoring an offense on an excluded method' do |excluded|
+    before { cop_config['ExcludedMethods'] = [excluded] }
+
+    it 'still rejects other methods with long blocks' do
+      expect_offense(<<~RUBY)
+        def m
+        ^^^^^ Method has too many lines. [6/5]
+          a = 1
+          a = 2
+          a = 3
+          a = 4
+          a = 5
+          a = 6
+        end
+      RUBY
+    end
+
+    it 'accepts the foo method with a long block' do
+      puts '****************'
+      puts excluded
+      puts '****************'
+      expect_no_offenses(<<~RUBY)
+        def #{excluded}
+          a = 1
+          a = 2
+          a = 3
+          a = 4
+          a = 5
+          a = 6
+        end
+      RUBY
+    end
+  end
+
   context 'when method is an instance method' do
     it 'registers an offense' do
       expect_offense(<<~RUBY)
@@ -190,34 +224,45 @@ RSpec.describe RuboCop::Cop::Metrics::MethodLength, :config do
     end
   end
 
-  context 'when method is defined in `ExcludedMethods`' do
-    before { cop_config['ExcludedMethods'] = ['foo'] }
+  context 'when ExcludedMethods is enabled' do
+    it_behaves_like('ignoring an offense on an excluded method', 'foo')
 
-    it 'still rejects other methods with more than 5 lines' do
-      expect_offense(<<~RUBY)
-        def m 
-        ^^^^^^ Method has too many lines. [6/5]
-          a = 1
-          a = 2
-          a = 3
-          a = 4
-          a = 5
-          a = 6
-        end
-      RUBY
+    it_behaves_like('ignoring an offense on an excluded method',
+                    'Gem::Specification.new')
+
+    context 'when receiver contains whitespaces' do
+      before { cop_config['ExcludedMethods'] = ['Foo::Bar.baz'] }
+
+      it 'ignores whitespaces' do
+        expect_no_offenses(<<~RUBY)
+          Foo::
+            Bar.baz do
+            a = 1
+            a = 2
+            a = 3
+            a = 4
+            a = 5
+            a = 6
+          end
+        RUBY
+      end
     end
 
-    it 'accepts the foo method with more than 5 lines' do
-      expect_no_offenses(<<~RUBY)
-        def foo
-          a = 1
-          a = 2
-          a = 3
-          a = 4
-          a = 5
-          a = 6
-        end
-      RUBY
+    context 'when a method is ignored, but receiver is a module' do
+      before { cop_config['ExcludedMethods'] = ['baz'] }
+
+      it 'does not report an offense' do
+        expect_no_offenses(<<~RUBY)
+          Foo::Bar.baz do
+            a = 1
+            a = 2
+            a = 3
+            a = 4
+            a = 5
+            a = 6
+          end
+        RUBY
+      end
     end
   end
 end
